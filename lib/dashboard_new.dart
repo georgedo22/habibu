@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:habibuv2/Governorate_Projects.dart';
 import 'package:habibuv2/InventoryApp/api_service.dart';
@@ -16,7 +17,7 @@ import 'package:habibuv2/models/vehicle.dart';
 import 'package:habibuv2/services/vehicle_service.dart';
 import 'package:habibuv2/states_page.dart';
 import 'package:habibuv2/users_page.dart';
-import 'package:charts_flutter/flutter.dart' as charts;
+//import 'package:charts_flutter/flutter.dart' as charts;
 import 'package:habibuv2/widgets/vehicle_dialog.dart';
 import 'package:http/http.dart' as http;
 
@@ -822,101 +823,116 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
 
   Widget _buildPieChart() {
     final screenWidth = MediaQuery.of(context).size.width;
-    double minValue(double value, [double min = 1.0]) => value < min ? min : value;
+    double minValue(double value, [double min = 1.0]) =>
+        value < min ? min : value;
     final data = [
       _ChartData('Active', workingMachinesCount, Colors.green),
       _ChartData('Maintenance', underMaintenanceMachinesCount, Colors.orange),
       _ChartData('Idle', stoppedMachinesCount, Colors.red),
     ];
-
-    final series = [
-      charts.Series<_ChartData, String>(
-        id: 'Machine Status',
-        domainFn: (data, _) => data.label,
-        measureFn: (data, _) => data.value,
-        colorFn: (data, _) => charts.ColorUtil.fromDartColor(data.color),
-        labelAccessorFn: (data, _) => data.value > 0 ? '${data.label}: ${data.value}' : '',
-        data: data,
-      ),
-    ];
-
-    // Responsive arcWidth and fontSize
-    final arcWidth = minValue(screenWidth < 350 ? 30 : (screenWidth < 600 ? 40 : 60));
-    final fontSize = minValue(screenWidth < 350 ? 8 : (screenWidth < 600 ? 10 : 14));
-
-    return charts.PieChart<String>(
-      series,
-      animate: true,
-      defaultRenderer: charts.ArcRendererConfig<String>(
-        arcWidth: arcWidth.toInt(),
-        strokeWidthPx: 0,
-        arcRendererDecorators: [
-          charts.ArcLabelDecorator<String>(
-            labelPosition: charts.ArcLabelPosition.auto,
-            insideLabelStyleSpec: charts.TextStyleSpec(
-              fontSize: fontSize.toInt(),
-              color: charts.MaterialPalette.white,
+    final total = data.fold<int>(0, (sum, d) => sum + d.value);
+    final arcWidth =
+        minValue(screenWidth < 350 ? 30 : (screenWidth < 600 ? 40 : 60));
+    final fontSize =
+        minValue(screenWidth < 350 ? 8 : (screenWidth < 600 ? 10 : 14));
+    return PieChart(
+      PieChartData(
+        sections: data.map((d) {
+          return PieChartSectionData(
+            color: d.color,
+            value: d.value.toDouble(),
+            title: d.value > 0 ? '${d.label}: ${d.value}' : '',
+            radius: arcWidth,
+            titleStyle: TextStyle(
+              fontSize: fontSize,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
             ),
-            outsideLabelStyleSpec: charts.TextStyleSpec(
-              fontSize: fontSize.toInt(),
-              color: charts.MaterialPalette.gray.shade800,
-            ),
-            showLeaderLines: true,
-          ),
-        ],
+            showTitle: d.value > 0,
+          );
+        }).toList(),
+        sectionsSpace: 2,
+        centerSpaceRadius: 0,
       ),
+      swapAnimationDuration: Duration(milliseconds: 500),
     );
   }
 
   Widget _buildBarChart() {
-    // Sort items by quantity and take top 10 for better visualization
     final sortedItems = List<SparePart>.from(stockItems)
       ..sort((a, b) => b.quantity.compareTo(a.quantity));
-
     final topItems = sortedItems.take(10).toList();
-
     final data = topItems.map((item) {
       String displayName = item.partName;
-      // Add part code for unique identification
       displayName = displayName.length > 15
           ? '${displayName.substring(0, 12)}... (${item.partCode})'
           : '$displayName (${item.partCode})';
-
       return _ChartData(displayName, item.quantity,
           item.quantity <= item.minimumThreshold ? Colors.red : Colors.blue);
     }).toList();
-
-    final series = [
-      charts.Series<_ChartData, String>(
-        id: 'Inventory',
-        domainFn: (_ChartData data, _) => data.label,
-        measureFn: (_ChartData data, _) => data.value,
-        colorFn: (_ChartData data, _) =>
-            charts.ColorUtil.fromDartColor(data.color),
-        data: data,
-        labelAccessorFn: (_ChartData data, _) => '${data.value}',
-      ),
-    ];
-
-    return charts.BarChart(
-      series,
-      animate: true,
-      vertical: false,
-      barRendererDecorator: charts.BarLabelDecorator<String>(),
-      domainAxis: charts.OrdinalAxisSpec(
-        renderSpec: charts.SmallTickRendererSpec(
-          labelRotation: 0,
-          labelStyle: charts.TextStyleSpec(
-            fontSize: 10,
-            color: charts.MaterialPalette.gray.shade600,
+    final fontSize = 10.0;
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceBetween,
+        maxY: data.isNotEmpty
+            ? data
+                    .map((d) => d.value)
+                    .reduce((a, b) => a > b ? a : b)
+                    .toDouble() +
+                5
+            : 10,
+        barTouchData: BarTouchData(enabled: true),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 40,
+                getTitlesWidget: (value, meta) {
+                  return Text(value.toInt().toString(),
+                      style: TextStyle(fontSize: fontSize));
+                }),
+          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= data.length) return SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Text(
+                    data[idx].label,
+                    style: TextStyle(fontSize: fontSize - 1),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+              reservedSize: 80,
+            ),
           ),
         ),
+        barGroups: List.generate(data.length, (i) {
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: data[i].value.toDouble(),
+                color: data[i].color,
+                width: 18,
+                borderRadius: BorderRadius.circular(4),
+                backDrawRodData: BackgroundBarChartRodData(
+                    show: true, toY: 0, color: Colors.grey[200]!),
+              ),
+            ],
+            showingTooltipIndicators: [0],
+          );
+        }),
+        gridData: FlGridData(show: true),
+        borderData: FlBorderData(show: false),
       ),
-      primaryMeasureAxis: charts.NumericAxisSpec(
-        tickProviderSpec: charts.BasicNumericTickProviderSpec(
-          desiredTickCount: 6,
-        ),
-      ),
+      swapAnimationDuration: Duration(milliseconds: 500),
     );
   }
 
@@ -924,66 +940,80 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
     if (projectSummaries.isEmpty) {
       return Center(child: Text('No project data available'));
     }
-
     final budgetData = projectSummaries
         .map((project) => _ChartData(
             project.projectName, project.budget.toInt(), Colors.blue.shade400))
         .toList();
-
     final invoiceData = projectSummaries
         .map((project) => _ChartData(project.projectName,
             project.invoicesTotal.toInt(), Colors.green.shade400))
         .toList();
-
-    final series = [
-      charts.Series<_ChartData, String>(
-        id: 'Budget',
-        domainFn: (_ChartData data, _) => data.label,
-        measureFn: (_ChartData data, _) => data.value,
-        colorFn: (_ChartData data, _) =>
-            charts.ColorUtil.fromDartColor(data.color),
-        data: budgetData,
-        labelAccessorFn: (_ChartData data, _) =>
-            '\$${(data.value).toStringAsFixed(1)}',
-      ),
-      charts.Series<_ChartData, String>(
-        id: 'Invoices',
-        domainFn: (_ChartData data, _) => data.label,
-        measureFn: (_ChartData data, _) => data.value,
-        colorFn: (_ChartData data, _) =>
-            charts.ColorUtil.fromDartColor(data.color),
-        data: invoiceData,
-        labelAccessorFn: (_ChartData data, _) =>
-            '\$${(data.value).toStringAsFixed(1)}',
-      ),
-    ];
-
-    return SizedBox(
-      height: 300,
-      child: charts.BarChart(
-        series,
-        animate: true,
-        barGroupingType: charts.BarGroupingType.grouped,
-        vertical: false,
-        barRendererDecorator: charts.BarLabelDecorator<String>(),
-        domainAxis: charts.OrdinalAxisSpec(
-          renderSpec: charts.SmallTickRendererSpec(
-            labelRotation: 0,
-            labelStyle: charts.TextStyleSpec(
-              fontSize: 10,
-              color: charts.MaterialPalette.gray.shade600,
+    final fontSize = 10.0;
+    return BarChart(
+      BarChartData(
+        barGroups: List.generate(budgetData.length, (i) {
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: budgetData[i].value.toDouble(),
+                color: budgetData[i].color,
+                width: 10,
+                borderRadius: BorderRadius.circular(2),
+              ),
+              BarChartRodData(
+                toY: invoiceData[i].value.toDouble(),
+                color: invoiceData[i].color,
+                width: 10,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ],
+            showingTooltipIndicators: [0, 1],
+          );
+        }),
+        groupsSpace: 24,
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 40,
+                getTitlesWidget: (value, meta) {
+                  return Text(value.toInt().toString(),
+                      style: TextStyle(fontSize: fontSize));
+                }),
+          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= budgetData.length)
+                  return SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Text(
+                    budgetData[idx].label,
+                    style: TextStyle(fontSize: fontSize - 1),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+              reservedSize: 80,
             ),
           ),
         ),
-        behaviors: [
-          charts.SeriesLegend(
-            position: charts.BehaviorPosition.top,
-            horizontalFirst: false,
-            desiredMaxRows: 2,
-            cellPadding: EdgeInsets.only(right: 16.0, bottom: 4.0),
-          ),
-        ],
+        gridData: FlGridData(show: true),
+        borderData: FlBorderData(show: false),
+        barTouchData: BarTouchData(enabled: true),
+        maxY: [
+              ...budgetData.map((d) => d.value),
+              ...invoiceData.map((d) => d.value)
+            ].reduce((a, b) => a > b ? a : b).toDouble() +
+            10,
       ),
+      swapAnimationDuration: Duration(milliseconds: 500),
     );
   }
 }
